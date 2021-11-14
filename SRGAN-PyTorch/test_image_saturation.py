@@ -10,6 +10,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# python test_image_saturation.py --lr same_geo_data/test/input/im6.npy --hr same_geo_data/test/target/im6.npy --lr_C same_geo_data/test/input_BPR/im6.npy --hr_C same_geo_data/test/target_BPR/im6.npy -a srgan_2x2 --upscale-factor 2 --model-path weights/PSNR.pth --pretrained --gpu 0
+#
 # ==============================================================================
 import argparse
 import logging
