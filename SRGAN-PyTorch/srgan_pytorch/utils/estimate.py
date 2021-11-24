@@ -80,7 +80,7 @@ def test(dataloader: torch.utils.data.DataLoader, model: nn.Module, gpu: int) ->
     total_hs_mass = 0.
 
     with torch.no_grad():
-        for i, (lr, _, hr, lr_C, hr_C) in progress_bar:
+        for i, (lr, _, hr, lr_C, hr_C, hr_0) in progress_bar:
             # Move data to special device.
             if gpu is not None:
                 lr = lr.cuda(gpu, non_blocking=True)
@@ -88,6 +88,7 @@ def test(dataloader: torch.utils.data.DataLoader, model: nn.Module, gpu: int) ->
                 hr = hr.cuda(gpu, non_blocking=True)
                 lr_C = lr_C.cuda(gpu, non_blocking=True)
                 hr_C = hr_C.cuda(gpu, non_blocking=True)
+                hr_0 = hr_0.cuda(gpu, non_blocking=True)
 
             sr = model(lr)
             np_sr = sr.cpu().numpy().astype(np.single)
@@ -95,12 +96,12 @@ def test(dataloader: torch.utils.data.DataLoader, model: nn.Module, gpu: int) ->
             np_lr = lr.cpu().numpy().astype(np.single)
             np_lr_C = lr_C.cpu().numpy().astype(np.single)
             np_hr_C = hr_C.cpu().numpy().astype(np.single)
-            #print(np_sr.shape, np_hr.shape, np_lr_C.shape, "=============== Shape")
+            np_hr_0 = hr_0.cpu().numpy().astype(np.single)
 
             ## Test Mass Balance
-            sr_mass = np.sum(np.multiply(np_sr,np_hr_C))/(3.0*np_lr.shape[0]) # n * 3 * x * y
-            lr_mass = np.sum(np.multiply(np_lr,np_lr_C))/(3.0*np_lr.shape[0])
-            hr_mass = np.sum(np.multiply(np_hr,np_hr_C))/(3.0*np_lr.shape[0])
+            sr_mass = np.sum(np.multiply(np_sr,np_hr_C))/(np_lr.shape[0]) # n * 3 * x * y
+            lr_mass = np.sum(np.multiply(np_lr[:,2:3,:,:],np_lr_C))/(np_lr.shape[0])
+            hr_mass = np.sum(np.multiply(np_hr,np_hr_C))/(np_lr.shape[0])
             total_hr_mass += (sr_mass-hr_mass)*100.0/hr_mass
             total_lr_mass += (sr_mass-lr_mass)*100.0/lr_mass
             total_gt_mass += (hr_mass-lr_mass)*100.0/lr_mass
@@ -111,9 +112,9 @@ def test(dataloader: torch.utils.data.DataLoader, model: nn.Module, gpu: int) ->
             # The SSIM of the generated fake high-resolution image and real high-resolution image is calculated.
             total_ssim_value += ssim_loss(sr, hr)
             # The LPIPS of the generated fake high-resolution image and real high-resolution image is calculated.
-            total_lpips_value += lpips_loss(sr, hr)
+            total_lpips_value += 0.0 #lpips_loss(sr, hr)
             # The GMSD of the generated fake high-resolution image and real high-resolution image is calculated.
-            total_gmsd_value += gmsd_loss(sr, hr)
+            total_gmsd_value += 0.0 #gmsd_loss(sr, hr)
 
             progress_bar.set_description(f"PSNR: {total_psnr_value / (i + 1):.2f} "
                                          f"SSIM: {total_ssim_value / (i + 1):.4f} "

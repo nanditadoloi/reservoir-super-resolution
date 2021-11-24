@@ -74,9 +74,62 @@ class Generator(nn.Module):
 
         return out
 
+class Generator_so(nn.Module):
+    def __init__(self, upscale_factor: int = 4) -> None:
+        r"""
+        Args:
+            upscale_factor (int): How many times to upscale the picture. (Default: 4)
+        """
+        super(Generator_so, self).__init__()
+        # Calculating the number of subpixel convolution layers.
+        num_subpixel_convolution_layers = int(math.log(upscale_factor, 2))
+
+        # First layer.
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=9, stride=1, padding=4),
+            nn.PReLU()
+        )
+
+        # 16 Residual blocks.
+        trunk = []
+        for _ in range(16):
+            trunk.append(ResidualBlock(channels=64))
+        self.trunk = nn.Sequential(*trunk)
+
+        # Second conv layer post residual blocks.
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.BatchNorm2d(64)
+        )
+
+        # 2 Sub-pixel convolution layers.
+        subpixel_conv_layers = []
+        for _ in range(num_subpixel_convolution_layers):
+            subpixel_conv_layers.append(SubpixelConvolutionLayer(64))
+        self.subpixel_conv = nn.Sequential(*subpixel_conv_layers)
+
+        # Final output layer.
+        self.conv3 = nn.Conv2d(64, 1, kernel_size=9, stride=1, padding=4)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        conv1 = self.conv1(x)
+        trunk = self.trunk(conv1)
+        conv2 = self.conv2(trunk)
+        out = torch.add(conv1, conv2)
+        out = self.subpixel_conv(out)
+        out = self.conv3(out)
+        return out
+
 
 def _gan(arch: str, upscale_factor: int, pretrained: bool, progress: bool) -> Generator:
     model = Generator(upscale_factor)
+    if pretrained:
+        state_dict = load_state_dict_from_url(model_urls[arch], progress=progress, map_location=torch.device("cpu"))
+        model.load_state_dict(state_dict)
+    return model
+
+def _gan_so(arch: str, upscale_factor: int, pretrained: bool, progress: bool) -> Generator_so:
+    model = Generator_so(upscale_factor)
     if pretrained:
         state_dict = load_state_dict_from_url(model_urls[arch], progress=progress, map_location=torch.device("cpu"))
         model.load_state_dict(state_dict)
@@ -91,6 +144,15 @@ def srgan_2x2(pretrained: bool = False, progress: bool = True) -> Generator:
         progress (bool): If True, displays a progress bar of the download to stderr
     """
     return _gan("srgan_2x2", 2, pretrained, progress)
+
+def srgan_2x2_so(pretrained: bool = False, progress: bool = True) -> Generator_so:
+    r"""GAN model architecture from the `"One weird trick..." <https://arxiv.org/abs/1609.04802>` paper.
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+        progress (bool): If True, displays a progress bar of the download to stderr
+    """
+    return _gan_so("srgan_2x2", 2, pretrained, progress)
 
 
 def srgan(pretrained: bool = False, progress: bool = True) -> Generator:

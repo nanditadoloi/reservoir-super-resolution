@@ -325,7 +325,7 @@ class CustomTrainDataset_np_crop(torch.utils.data.dataset.Dataset):
         # lr_BPR = self.transforms(lr_BPR_3ch[:,sidx:sidx+15,:])
         # hr_BPR = self.transforms(hr_BPR_3ch[:,idx:idx+30,:])
 
-        lr = self.transforms(lr_3ch)
+        lr = self.transforms(lr_3ch) # Makes channels go to axis 0
         hr = self.transforms(hr_3ch)
         lr_BPR = self.transforms(lr_BPR_3ch)
         hr_BPR = self.transforms(hr_BPR_3ch)
@@ -380,8 +380,6 @@ class CustomTestDataset_np_crop(torch.utils.data.dataset.Dataset):
         hr_3ch = np.expand_dims(hr_1ch[0,:,:],axis=2).repeat(3,axis=2)
         hr_BPR_1ch = (np.load(self.hr_BPR_filenames[index])).astype(np.single)
         hr_BPR_3ch = np.expand_dims(hr_BPR_1ch[0,:,:],axis=2).repeat(3,axis=2)
-        
-        #print("dataloader", lr_BPR_1ch.shape)
 
         idx = torch.randint(0,110-30,[1]).numpy()[0]
         sidx = int(idx/2)
@@ -390,11 +388,158 @@ class CustomTestDataset_np_crop(torch.utils.data.dataset.Dataset):
         lr_BPR = self.transforms(lr_BPR_3ch[:,:,:])
         hr_BPR = self.transforms(hr_BPR_3ch[:,:,:])
 
-        #print("dataloader", lr_BPR_1ch.shape, lr_BPR.shape)
-
         bicubic = self.bicubic_transforms(lr)
 
         return lr, bicubic, hr, lr_BPR, hr_BPR
 
     def __len__(self):
         return len(self.sampler_filenames)
+    
+
+class CustomTrainDataset_np_crop_tempo(torch.utils.data.dataset.Dataset):
+    def __init__(self, root: str, sampler_frequency: int = 1):
+        r"""
+        Args:
+            root (str): The directory address where the data image is stored.
+            sampler_frequency (int): If there are many datasets, this method can be used to increase the number of epochs. (Default: 1)
+        """
+        super(CustomTrainDataset_np_crop_tempo, self).__init__()
+        lr_dir_0 = os.path.join(root, "input_0")
+        hr_dir_0 = os.path.join(root, "target_0")
+        lr_BPR_dir_0 = os.path.join(root, "input_BPR_0")
+        hr_BPR_dir_0 = os.path.join(root, "target_BPR_0")
+        self.filenames_0 = os.listdir(lr_dir_0)
+        self.sampler_filenames_0 = random.sample(self.filenames_0, len(self.filenames_0) // sampler_frequency)
+        self.lr_filenames_0 = [os.path.join(lr_dir_0, x) for x in self.sampler_filenames_0 if check_image_file(x)]
+        self.hr_filenames_0 = [os.path.join(hr_dir_0, x) for x in self.sampler_filenames_0 if check_image_file(x)]
+        self.lr_BPR_filenames_0 = [os.path.join(lr_BPR_dir_0, x) for x in self.sampler_filenames_0 if check_image_file(x)]
+        self.hr_BPR_filenames_0 = [os.path.join(hr_BPR_dir_0, x) for x in self.sampler_filenames_0 if check_image_file(x)]
+
+        lr_dir_1 = os.path.join(root, "input_1")
+        hr_dir_1 = os.path.join(root, "target_1")
+        lr_BPR_dir_1 = os.path.join(root, "input_BPR_1")
+        hr_BPR_dir_1 = os.path.join(root, "target_BPR_1")
+        self.filenames_1 = os.listdir(lr_dir_1)
+        self.sampler_filenames_1 = random.sample(self.filenames_1, len(self.filenames_1) // sampler_frequency)
+        self.lr_filenames_1 = [os.path.join(lr_dir_1, x) for x in self.sampler_filenames_1 if check_image_file(x)]
+        self.hr_filenames_1 = [os.path.join(hr_dir_1, x) for x in self.sampler_filenames_1 if check_image_file(x)]
+        self.lr_BPR_filenames_1 = [os.path.join(lr_BPR_dir_1, x) for x in self.sampler_filenames_1 if check_image_file(x)]
+        self.hr_BPR_filenames_1 = [os.path.join(hr_BPR_dir_1, x) for x in self.sampler_filenames_1 if check_image_file(x)]
+
+        self.transforms = transforms.ToTensor()
+
+    def __getitem__(self, index):
+        r""" Get image source file.
+
+        Args:
+            index (int): Index position in image list.
+
+        Returns:
+            Low resolution image, high resolution image.
+        """
+        lr_1ch_0 = (np.load(self.lr_filenames_0[index])).astype(np.single)
+        lr_BPR_1ch_0 = np.load(self.lr_BPR_filenames_0[index]).astype(np.single)
+        lr_1ch_1 = (np.load(self.lr_filenames_1[index])).astype(np.single)
+        lr_BPR_1ch_1 = np.load(self.lr_BPR_filenames_1[index]).astype(np.single)
+        m0 = lr_1ch_0*lr_BPR_1ch_0
+        m1 = lr_1ch_1*lr_BPR_1ch_1
+        delm = 10**(-6)*(m1-m0)
+        lr = np.array([lr_1ch_0[0,:,:], delm[0,:,:], lr_1ch_1[0,:,:]])
+        lr = np.moveaxis(lr, 0, -1)
+        lr_BPR = np.moveaxis(lr_1ch_1, 0, -1)
+
+        hr_1ch = (np.load(self.hr_filenames_1[index])).astype(np.single)
+        hr = np.moveaxis(hr_1ch, 0, -1)
+        hr_1ch_0 = (np.load(self.hr_filenames_0[index])).astype(np.single)
+        hr_0 = np.moveaxis(hr_1ch_0, 0, -1)
+        hr_BPR_1ch = (np.load(self.hr_BPR_filenames_1[index])).astype(np.single)
+        hr_BPR = np.moveaxis(hr_BPR_1ch, 0, -1)
+
+        lr = self.transforms(lr)
+        hr = self.transforms(hr)
+        hr_0 = self.transforms(hr_0)
+        lr_BPR = self.transforms(lr_BPR)
+        hr_BPR = self.transforms(hr_BPR)
+
+        return lr, hr, lr_BPR, hr_BPR, hr_0
+
+    def __len__(self):
+        return len(self.sampler_filenames_0)
+
+class CustomTestDataset_np_crop_tempo(torch.utils.data.dataset.Dataset):
+    def __init__(self, root: str, sampler_frequency: int = 1):
+        r"""
+        Args:
+            root (str): The directory address where the data image is stored.
+            image_size (optional, int): The size of image block is randomly cut out from the original image. (Default: 256)
+            sampler_frequency (list): If there are many datasets, this method can be used to increase the number of epochs. (Default: 1)
+        """
+        super(CustomTestDataset_np_crop_tempo, self).__init__()
+        lr_dir_0 = os.path.join(root, "input_0")
+        hr_dir_0 = os.path.join(root, "target_0")
+        lr_BPR_dir_0 = os.path.join(root, "input_BPR_0")
+        hr_BPR_dir_0 = os.path.join(root, "target_BPR_0")
+        self.filenames_0 = os.listdir(lr_dir_0)
+        self.sampler_filenames_0 = random.sample(self.filenames_0, len(self.filenames_0) // sampler_frequency)
+        self.lr_filenames_0 = [os.path.join(lr_dir_0, x) for x in self.sampler_filenames_0 if check_image_file(x)]
+        self.hr_filenames_0 = [os.path.join(hr_dir_0, x) for x in self.sampler_filenames_0 if check_image_file(x)]
+        self.lr_BPR_filenames_0 = [os.path.join(lr_BPR_dir_0, x) for x in self.sampler_filenames_0 if check_image_file(x)]
+        self.hr_BPR_filenames_0 = [os.path.join(hr_BPR_dir_0, x) for x in self.sampler_filenames_0 if check_image_file(x)]
+
+        lr_dir_1 = os.path.join(root, "input_1")
+        hr_dir_1 = os.path.join(root, "target_1")
+        lr_BPR_dir_1 = os.path.join(root, "input_BPR_1")
+        hr_BPR_dir_1 = os.path.join(root, "target_BPR_1")
+        self.filenames_1 = os.listdir(lr_dir_1)
+        self.sampler_filenames_1 = random.sample(self.filenames_1, len(self.filenames_1) // sampler_frequency)
+        self.lr_filenames_1 = [os.path.join(lr_dir_1, x) for x in self.sampler_filenames_1 if check_image_file(x)]
+        self.hr_filenames_1 = [os.path.join(hr_dir_1, x) for x in self.sampler_filenames_1 if check_image_file(x)]
+        self.lr_BPR_filenames_1 = [os.path.join(lr_BPR_dir_1, x) for x in self.sampler_filenames_1 if check_image_file(x)]
+        self.hr_BPR_filenames_1 = [os.path.join(hr_BPR_dir_1, x) for x in self.sampler_filenames_1 if check_image_file(x)]
+
+        self.transforms = transforms.ToTensor()
+        self.bicubic_transforms = transforms.Compose([
+            transforms.ToPILImage(),
+            transforms.Resize((30, 30), interpolation=InterpolationMode.BICUBIC),
+            transforms.ToTensor()
+        ])
+
+    def __getitem__(self, index):
+        r""" Get image source file.
+
+        Args:
+            index (int): Index position in image list.
+
+        Returns:
+            Low resolution image, high resolution image.
+        """
+        lr_1ch_0 = (np.load(self.lr_filenames_0[index])).astype(np.single)
+        lr_BPR_1ch_0 = np.load(self.lr_BPR_filenames_0[index]).astype(np.single)
+        lr_1ch_1 = (np.load(self.lr_filenames_1[index])).astype(np.single)
+        lr_BPR_1ch_1 = np.load(self.lr_BPR_filenames_1[index]).astype(np.single)
+        m0 = lr_1ch_0*lr_BPR_1ch_0
+        m1 = lr_1ch_1*lr_BPR_1ch_1
+        delm = 10**(-6)*(m1-m0)
+        lr = np.array([lr_1ch_0[0,:,:], delm[0,:,:], lr_1ch_1[0,:,:]])
+        lr = np.moveaxis(lr, 0, -1)
+        lr_BPR = np.moveaxis(lr_1ch_1, 0, -1)
+
+        hr_1ch = (np.load(self.hr_filenames_1[index])).astype(np.single)
+        hr = np.moveaxis(hr_1ch, 0, -1)
+        hr_1ch_0 = (np.load(self.hr_filenames_0[index])).astype(np.single)
+        hr_0 = np.moveaxis(hr_1ch_0, 0, -1)
+        hr_BPR_1ch = (np.load(self.hr_BPR_filenames_1[index])).astype(np.single)
+        hr_BPR = np.moveaxis(hr_BPR_1ch, 0, -1)
+
+        lr = self.transforms(lr)
+        hr = self.transforms(hr)
+        hr_0 = self.transforms(hr_0)
+        lr_BPR = self.transforms(lr_BPR)
+        hr_BPR = self.transforms(hr_BPR)
+
+        bicubic = self.bicubic_transforms(lr)
+
+        return lr, bicubic, hr, lr_BPR, hr_BPR, hr_0
+
+    def __len__(self):
+        return len(self.sampler_filenames_0)

@@ -13,4 +13,5 @@
 # ==============================================================================
 from .generator import srgan
 from .generator import srgan_2x2
+from .generator import srgan_2x2_so
 from .generator import srgan_8x8

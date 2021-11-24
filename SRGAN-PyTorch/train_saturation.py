@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# python train_saturation.py ../Models/data_files_2 --arch srgan_2x2 --image-size 30 --upscale-factor 2 --gpu 0 --resume_psnr weights/PSNR_full_epoch1190.pth
+# python train_saturation.py ../Models/data_files_2 --arch srgan_2x2 --image-size 30 --upscale-factor 2 --gpu 0 --resume_psnr weights/PSNR_full_epoch1190.pth --start-psnr-epoch 1190
 #
 # ==============================================================================
 import argparse
@@ -35,8 +35,8 @@ import torchvision.utils as vutils
 from torch.utils.tensorboard import SummaryWriter
 
 import srgan_pytorch.models as models
-from srgan_pytorch.dataset import CustomTestDataset_np_crop
-from srgan_pytorch.dataset import CustomTrainDataset_np_crop
+from srgan_pytorch.dataset import CustomTestDataset_np_crop_tempo
+from srgan_pytorch.dataset import CustomTrainDataset_np_crop_tempo
 from srgan_pytorch.loss import VGGLoss
 from srgan_pytorch.models.discriminator import discriminator_for_vgg
 from srgan_pytorch.utils.common import AverageMeter
@@ -238,8 +238,8 @@ def main_worker(gpu, ngpus_per_node, args):
 
     logger.info("Load training dataset")
     # Selection of appropriate treatment equipment.
-    train_dataset = CustomTrainDataset_np_crop(os.path.join(args.data, "train"))
-    test_dataset = CustomTestDataset_np_crop(os.path.join(args.data, "test"))
+    train_dataset = CustomTrainDataset_np_crop_tempo(os.path.join(args.data, "train"))
+    test_dataset = CustomTestDataset_np_crop_tempo(os.path.join(args.data, "test"))
 
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
@@ -285,6 +285,7 @@ def main_worker(gpu, ngpus_per_node, args):
             best_psnr = checkpoint["best_psnr"]
             if args.gpu is not None:
                 # best_psnr may be from a checkpoint from a different GPU
+                best_psnr = torch.tensor(best_psnr)
                 best_psnr = best_psnr.to(args.gpu)
             generator.load_state_dict(checkpoint["state_dict"])
             psnr_optimizer.load_state_dict(checkpoint["optimizer"])
@@ -435,23 +436,28 @@ def train_psnr(dataloader: torch.utils.data.DataLoader,
     # switch to train mode
     model.train()
     mass_criterion = nn.L1Loss().cuda(args.gpu)
+    temp_criterion = nn.L1Loss().cuda(args.gpu)
+    avgp = torch.nn.AvgPool2d(2)
 
     end = time.time()
-    for i, (lr, hr, lr_C, hr_C) in enumerate(dataloader):
+    for i, (lr, hr, lr_C, hr_C, hr_0) in enumerate(dataloader):
         # Move data to special device.
         if args.gpu is not None:
             lr = lr.cuda(args.gpu, non_blocking=True)
             hr = hr.cuda(args.gpu, non_blocking=True)
             lr_C = lr_C.cuda(args.gpu, non_blocking=True)
             hr_C = hr_C.cuda(args.gpu, non_blocking=True)
+            hr_0 = hr_0.cuda(args.gpu, non_blocking=True)
 
         optimizer.zero_grad()
 
         with amp.autocast():
             sr = model(lr)
-            sr_mass = torch.sum(sr*hr_C,(3,2,1))/3.0
-            lr_mass = torch.sum(lr*lr_C,(3,2,1))/3.0
-            loss = criterion(sr, hr) + 10**(-6)*mass_criterion(sr_mass, lr_mass)
+            sr_mass = torch.sum(sr*hr_C,(3,2,1))
+            lr_mass = torch.sum(lr[:,2:3,:,:]*lr_C,(3,2,1))
+            delm = 10**(-6)*((sr*hr_C)-(hr_0*hr_C))
+            delm = avgp(delm)
+            loss = criterion(sr, hr) + 10**(-6)*mass_criterion(sr_mass, lr_mass) + temp_criterion(delm, lr[:,1:2,:,:])
 
         scaler.scale(loss).backward()
         scaler.step(optimizer)
