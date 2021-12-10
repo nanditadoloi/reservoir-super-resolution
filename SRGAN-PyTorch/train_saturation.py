@@ -220,7 +220,7 @@ def main_worker(gpu, ngpus_per_node, args):
                 f"\tAdversarial: BCELoss")
 
     # All optimizer function and scheduler function.
-    psnr_optimizer = torch.optim.Adam(generator.parameters(), lr=args.psnr_lr, betas=(0.9, 0.999))
+    psnr_optimizer = torch.optim.Adam(generator.parameters(), lr=args.psnr_lr, betas=(0.9, 0.999), weight_decay=1)
     discriminator_optimizer = torch.optim.Adam(discriminator.parameters(), lr=args.gan_lr, betas=(0.9, 0.999))
     generator_optimizer = torch.optim.Adam(generator.parameters(), lr=args.gan_lr, betas=(0.9, 0.999))
     discriminator_scheduler = torch.optim.lr_scheduler.StepLR(discriminator_optimizer, step_size=args.gan_epochs // 2, gamma=0.1)
@@ -335,14 +335,14 @@ def main_worker(gpu, ngpus_per_node, args):
         if args.distributed:
             train_sampler.set_epoch(epoch)
 
-        train_psnr(dataloader=train_dataloader,
-                   model=generator,
-                   criterion=pixel_criterion,
-                   optimizer=psnr_optimizer,
-                   epoch=epoch,
-                   scaler=scaler,
-                   writer=psnr_writer,
-                   args=args)
+        # train_psnr(dataloader=train_dataloader,
+        #            model=generator,
+        #            criterion=pixel_criterion,
+        #            optimizer=psnr_optimizer,
+        #            epoch=epoch,
+        #            scaler=scaler,
+        #            writer=psnr_writer,
+        #            args=args)
 
         # Test for every epoch.
         psnr, ssim, lpips, gmsd, lr_mass, hr_mass, gt_mass, hs_mass = test(dataloader=test_dataloader, model=generator, gpu=args.gpu)
@@ -357,15 +357,15 @@ def main_worker(gpu, ngpus_per_node, args):
         is_best = psnr > best_psnr
         best_psnr = max(psnr, best_psnr)
 
-        if not args.multiprocessing_distributed or (args.multiprocessing_distributed and args.rank % ngpus_per_node == 0):
-            torch.save({"epoch": epoch + 1,
-                        "arch": args.arch,
-                        "best_psnr": best_psnr,
-                        "state_dict": generator.state_dict(),
-                        "optimizer": psnr_optimizer.state_dict(),
-                        }, os.path.join("weights", f"PSNR_epoch{epoch}.pth"))
-            if is_best:
-                torch.save(generator.state_dict(), os.path.join("weights", f"PSNR.pth"))
+        # if not args.multiprocessing_distributed or (args.multiprocessing_distributed and args.rank % ngpus_per_node == 0):
+        #     torch.save({"epoch": epoch + 1,
+        #                 "arch": args.arch,
+        #                 "best_psnr": best_psnr,
+        #                 "state_dict": generator.state_dict(),
+        #                 "optimizer": psnr_optimizer.state_dict(),
+        #                 }, os.path.join("weights", f"PSNR_epoch{epoch}.pth"))
+        #     if is_best:
+        #         torch.save(generator.state_dict(), os.path.join("weights", f"PSNR.pth"))
 
     # Load best model weight.
     if not(args.resume_d or args.resume_g):
