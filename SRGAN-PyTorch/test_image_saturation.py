@@ -12,6 +12,7 @@
 # limitations under the License.
 #
 # python test_image_saturation.py --lr same_geo_data/test/input/im6.npy --hr same_geo_data/test/target/im6.npy --lr_C same_geo_data/test/input_BPR/im6.npy --hr_C same_geo_data/test/target_BPR/im6.npy -a srgan_2x2 --upscale-factor 2 --model-path weights/PSNR.pth --pretrained --gpu 0
+# python test_image_saturation.py --lr same_geo_data/test/input/im18.npy --hr same_geo_data/test/target/im18.npy --lr_C same_geo_data/test/input_BPR/im18.npy --hr_C same_geo_data/test/target_BPR/im18.npy -a srgan_2x2 --upscale-factor 2 --model-path weights_backup/SRGAN_2x2_DIV2K-9ec9dd11.pth --pretrained --gpu 0 --resume_psnr weights_backup/PSNR_samegeo_mtc_epoch5115.pth
 #
 # ==============================================================================
 import argparse
@@ -65,6 +66,8 @@ parser.add_argument("--seed", default=666, type=int,
                     help="Seed for initializing training. (Default: 666)")
 parser.add_argument("--gpu", default=None, type=int,
                     help="GPU id to use.")
+parser.add_argument("--resume_psnr", default="", type=str, metavar="PATH",
+                    help="Path to latest psnr-oral checkpoint.")
 
 
 def main():
@@ -84,6 +87,21 @@ def main_worker(gpu, args):
         logger.info(f"Use GPU: {args.gpu} for testing.")
 
     model = configure(args)
+
+    if args.resume_psnr:
+        if os.path.isfile(args.resume_psnr):
+            logger.info(f"Loading checkpoint '{args.resume_psnr}'.")
+            if args.gpu is None:
+                checkpoint = torch.load(args.resume_psnr)
+            else:
+                # Map model to be loaded to specified single gpu.
+                checkpoint = torch.load(args.resume_psnr, map_location=f"cuda:{args.gpu}")
+            args.start_psnr_epoch = checkpoint["epoch"]
+            best_psnr = checkpoint["best_psnr"]
+            if args.gpu is not None:
+                # best_psnr may be from a checkpoint from a different GPU
+                best_psnr = best_psnr.to(args.gpu)
+            model.load_state_dict(checkpoint["state_dict"])
 
     if not torch.cuda.is_available():
         logger.warning("Using CPU, this will be slow.")
